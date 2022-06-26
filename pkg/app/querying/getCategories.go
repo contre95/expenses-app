@@ -32,5 +32,4 @@ func (s *CategoryGetter) Get() (*GetCategoriesResp, error) {
 		resp.Categories[string(c.ID)] = string(c.Name)
 	}
 	return &resp, nil
-
 }

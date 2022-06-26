@@ -8,6 +8,10 @@ import (
 	fiber "github.com/gofiber/fiber/v2"
 )
 
+type expenseImporterJSON struct {
+	BypassWrongExpenses bool `json:"bypass_wrong_expenses"`
+}
+
 func importExpenses(i importing.ImportExpenses) func(*fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		bodyJSON := expenseImporterJSON{}
