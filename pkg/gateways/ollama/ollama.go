@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -20,10 +21,11 @@ type OllamaAPI struct {
 }
 
 type ExpenseGuess struct {
-	Shop    string
-	Amount  float64
-	Date    time.Time
-	Product string
+	Shop        string
+	Amount      float64
+	Date        time.Time
+	Description string
+	Product     string
 }
 
 var OUTPUT_PROMPT = `1. OUTPUT FORMAT:
@@ -32,7 +34,8 @@ var OUTPUT_PROMPT = `1. OUTPUT FORMAT:
         {
             "shop": "Exact Merchant Name", 
             "amount": 123.45,
-            "date": "YYYY-MM-DD"
+            "date": "YYYY-MM-DD",
+            "description": "Product or service description"
         },
       ...
     ]
@@ -41,6 +44,8 @@ var OUTPUT_PROMPT = `1. OUTPUT FORMAT:
 - shop: String containing ONLY the business name (no lists/arrays)
 - amount: POSITIVE float (convert negatives to positive, NO symbols)
 - date: Full date in STRICT YYYY-MM-DD format (ignore time if present)
+- description: Optional short description of the product/service from the transaction
+- if not description then use AI Generated.
 3. STRICT PROHIBITIONS:
 - NO plural field names (use "shop", not "shops")
 - NO arrays in values (single value per field)
@@ -51,6 +56,7 @@ var OUTPUT_PROMPT = `1. OUTPUT FORMAT:
 - If date can't be converted to YYYY-MM-DD, OMIT ENTIRE ENTRY
 - If amount contains symbols, REMOVE THEM (keep numeric value)
 - If amount is negative, CONVERT TO POSITIVE
+- If description is missing, empty, or only whitespace, use AI Generated
 Convert this transaction text to JSON. Follow ALL rules EXACTLY.
     ` + "If no specific year is specified, assume is " + time.Now().Format("2006") + `
     ` + "If no specific month is specified, assume is " + time.Now().Format("Jan") + `
@@ -58,10 +64,10 @@ Convert this transaction text to JSON. Follow ALL rules EXACTLY.
 GOOD EXAMPLE:
 {
     "transactions": [
-        {"shop": "ShopName1", "amount": 65.00, "date": "YYYY-MM-DD"},
-        {"shop": "ShopName2", "amount": 5.00, "date": "YYYY-MM-DD"},
+        {"shop": "ShopName1", "amount": 65.00, "date": "YYYY-MM-DD", "description": "Coffee"},
+        {"shop": "ShopName2", "amount": 5.00, "date": "YYYY-MM-DD", "description": "AI Generated"},
         ...
-        {"shop": "ShopName8", "amount": 1.78, "date": "YYYY-MM-DD"}
+        {"shop": "ShopName8", "amount": 1.78, "date": "YYYY-MM-DD", "description": "AI Generated"}
     ]
 }
 `
@@ -139,9 +145,10 @@ func (o *OllamaAPI) parseAndConvertTransactions(responseStr string) ([]ExpenseGu
 	fmt.Printf("\n%s\n", responseStr)
 	var response struct {
 		Transactions []struct {
-			Date   string  `json:"date"`
-			Shop   string  `json:"shop"`
-			Amount float64 `json:"amount"`
+			Date        string  `json:"date"`
+			Shop        string  `json:"shop"`
+			Amount      float64 `json:"amount"`
+			Description string  `json:"description"`
 		} `json:"transactions"`
 	}
 
@@ -155,11 +162,18 @@ func (o *OllamaAPI) parseAndConvertTransactions(responseStr string) ([]ExpenseGu
 		if err != nil {
 			return nil, fmt.Errorf("error parsing date %q: %v", tx.Date, err)
 		}
+
+		description := strings.TrimSpace(tx.Description)
+		if description == "" {
+			description = "AI Generated"
+		}
+
 		guesses = append(guesses, ExpenseGuess{
-			Shop:    tx.Shop,
-			Amount:  math.Abs(tx.Amount),
-			Date:    parsedDate,
-			Product: "AI Generated",
+			Shop:        tx.Shop,
+			Amount:      math.Abs(tx.Amount),
+			Date:        parsedDate,
+			Description: description,
+			Product:     description,
 		})
 	}
 
